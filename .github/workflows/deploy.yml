@@ -24,7 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # 移除了 cache: 'npm'，解决 "lock file not found" 错误
 
       - name: Install and Build
         run: |

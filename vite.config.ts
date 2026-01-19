@@ -1,10 +1,11 @@
+
 import { defineConfig } from 'vite';
 
 export default defineConfig({
   base: './',
   define: {
-    // 确保 process.env 在浏览器中可用，防止 GeminiService 初始化崩溃
-    'process.env': {}
+    // 将环境变量注入到前端代码中
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
   },
   build: {
     outDir: 'dist',

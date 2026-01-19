@@ -5,8 +5,10 @@ import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { geminiService } from './services/geminiService';
 import { PanelLeft, Sparkles, Loader2, Save, FileDown } from 'lucide-react';
+
+// html2pdf.js 在打包环境下通常需要动态引入或特定的导入方式
 // @ts-ignore
-import html2pdf from 'html2pdf.js';
+import html2pdf from 'html2pdf.js/dist/html2pdf.min.js';
 
 const STORAGE_KEY = 'novascribe_docs';
 
@@ -16,7 +18,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [{ id: '1', title: '快速入门', content: '# 欢迎使用 NovaScribe\n\n这是一个类似于 Typora 的**所见即所得** Markdown 编辑器。\n\n- **点击**任意段落进行编辑\n- **回车**创建新段落\n- **AI 润色**一键美化内容', lastModified: Date.now() }];
   });
   
-  const [activeId, setActiveId] = useState(docs[0].id);
+  const [activeId, setActiveId] = useState(docs[0]?.id || '1');
   const [activeFileHandle, setActiveFileHandle] = useState<FileSystemFileHandle | null>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -47,12 +49,13 @@ const App: React.FC = () => {
   };
 
   const handleAiPolish = async () => {
+    if (!activeDoc.content.trim()) return;
     setIsAiLoading(true);
     try {
       const polished = await geminiService.polishMarkdown(activeDoc.content);
       updateActiveContent(polished);
     } catch (err) {
-      alert("AI 润色暂时不可用，请检查网络或 API Key");
+      alert("AI 润色暂时不可用，请检查网络或 GitHub Secrets 中的 API_KEY 配置");
     } finally {
       setIsAiLoading(false);
     }
@@ -60,8 +63,7 @@ const App: React.FC = () => {
 
   const handleSaveAs = async () => {
     try {
-      // @ts-ignore
-      const handle = await window.showSaveFilePicker({
+      const handle = await (window as any).showSaveFilePicker({
         suggestedName: `${activeDoc.title || '未命名'}.md`,
         types: [{
           description: 'Markdown 文件',
@@ -74,7 +76,6 @@ const App: React.FC = () => {
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         console.error("另存为失败:", err);
-        alert("保存失败，请重试");
       }
     }
   };
@@ -85,7 +86,7 @@ const App: React.FC = () => {
 
     setIsExporting(true);
     const opt = {
-      margin: 1,
+      margin: 0.5,
       filename: `${activeDoc.title || '文档'}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
@@ -96,7 +97,7 @@ const App: React.FC = () => {
       await html2pdf().set(opt).from(element).save();
     } catch (err) {
       console.error("PDF 导出失败:", err);
-      alert("PDF 导出失败");
+      alert("PDF 导出失败，请检查文档内容。");
     } finally {
       setIsExporting(false);
     }
@@ -130,7 +131,6 @@ const App: React.FC = () => {
       setActiveFileHandle(fileHandle);
     } catch (e) {
       console.error("读取文件失败:", e);
-      alert("无法读取该文件");
     }
   };
 
@@ -140,6 +140,8 @@ const App: React.FC = () => {
       editorRef.current?.focusLast();
     }
   };
+
+  if (!activeDoc) return <div className="p-10">加载中...</div>;
 
   return (
     <div className="flex h-screen w-full bg-white text-slate-900 overflow-hidden font-sans">
@@ -190,7 +192,7 @@ const App: React.FC = () => {
                 className="bg-transparent border-none outline-none font-bold text-sm text-slate-700 w-48 focus:ring-2 focus:ring-indigo-500/20 rounded px-1"
               />
               <span className="text-[10px] text-slate-400 px-1">
-                {activeFileHandle ? `工作区文件: ${activeFileHandle.name}` : '本地云草稿'}
+                {activeFileHandle ? `工作区文件: ${activeFileHandle.name}` : '本地草稿'}
               </span>
             </div>
           </div>
@@ -199,16 +201,14 @@ const App: React.FC = () => {
             <button 
               onClick={handleSaveAs}
               className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 text-slate-600 rounded-full text-xs font-semibold hover:bg-slate-50 transition-all active:scale-95"
-              title="另存为本地文件"
             >
               <Save size={14} />
-              另存为...
+              另存为
             </button>
             <button 
               onClick={handleExportPdf}
               disabled={isExporting}
-              className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 text-slate-600 rounded-full text-xs font-semibold hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
-              title="导出为 PDF"
+              className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 text-slate-600 rounded-full text-xs font-semibold hover:bg-slate-50 transition-all disabled:opacity-50"
             >
               {isExporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
               导出 PDF
@@ -219,7 +219,7 @@ const App: React.FC = () => {
               className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 text-white rounded-full text-xs font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
             >
               {isAiLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              AI 智能润色
+              AI 润色
             </button>
           </div>
         </header>
@@ -248,11 +248,10 @@ const App: React.FC = () => {
         <footer className="h-8 px-6 border-t border-slate-100 flex items-center justify-between text-[10px] font-medium text-slate-400 bg-white">
           <div className="flex items-center gap-4">
             <span>字符数: {activeDoc.content.length}</span>
-            <span>预计阅读: {Math.ceil(activeDoc.content.length / 400)} 分钟</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-            状态: {activeFileHandle ? '工作区模式' : '就绪'}
+            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+            状态: {activeFileHandle ? '工作区' : '就绪'}
           </div>
         </footer>
       </main>

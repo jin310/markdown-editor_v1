@@ -1,125 +1,238 @@
 
-import React, { useState, forwardRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { Block } from './Block';
 import { ContextMenu } from './ContextMenu';
 
 interface EditorProps {
   content: string;
-  projectHandle: FileSystemDirectoryHandle | null;
   onChange: (content: string) => void;
+  projectHandle: FileSystemDirectoryHandle | null;
 }
 
-export const Editor = forwardRef<any, EditorProps>(({ content, projectHandle, onChange }, ref) => {
-  const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null);
-  const [menuConfig, setMenuConfig] = useState<{ x: number, y: number, index: number } | null>(null);
+export interface EditorRef {
+  focusLast: () => void;
+  applyAction: (action: string) => void;
+  handlePasteImage: (file: File) => void;
+}
 
-  const blocks = content.split('\n\n');
+interface BlockItem {
+  id: string;
+  content: string;
+}
 
-  const updateBlock = (index: number, newBlockContent: string) => {
-    const newBlocks = [...blocks];
-    newBlocks[index] = newBlockContent;
-    onChange(newBlocks.join('\n\n'));
+const generateId = () => Math.random().toString(36).substring(2, 11);
+
+const splitMarkdownIntoBlocks = (text: string): string[] => {
+  if (!text) return [''];
+  const lines = text.split('\n');
+  const blocks: string[] = [];
+  let currentBlock: string[] = [];
+  let inCodeFence = false;
+  let inMathFence = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmedLine = line.trim();
+    if (trimmedLine.startsWith('```')) inCodeFence = !inCodeFence;
+    else if (trimmedLine.startsWith('$$')) inMathFence = !inMathFence;
+    const isInFence = inCodeFence || inMathFence;
+
+    if (!isInFence && trimmedLine === '' && currentBlock.length > 0) {
+      blocks.push(currentBlock.join('\n'));
+      currentBlock = [];
+    } else {
+      currentBlock.push(line);
+    }
+  }
+  if (currentBlock.length > 0) blocks.push(currentBlock.join('\n'));
+  return blocks.length > 0 ? blocks : [''];
+};
+
+export const Editor = forwardRef<EditorRef, EditorProps>(({ content, onChange, projectHandle }, ref) => {
+  const [internalBlocks, setInternalBlocks] = useState<BlockItem[]>([]);
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  const [menuPos, setMenuPos] = useState<{ x: number, y: number } | null>(null);
+
+  useEffect(() => {
+    const rawBlocks = splitMarkdownIntoBlocks(content);
+    if (rawBlocks.length !== internalBlocks.length) {
+      setInternalBlocks(rawBlocks.map((c, i) => ({ id: internalBlocks[i]?.id || generateId(), content: c })));
+    } else {
+      const updated = internalBlocks.map((b, i) => ({ ...b, content: rawBlocks[i] }));
+      if (JSON.stringify(updated) !== JSON.stringify(internalBlocks)) {
+        setInternalBlocks(updated);
+      }
+    }
+  }, [content]);
+
+  const syncToParent = (blocks: BlockItem[]) => {
+    const newContent = blocks.map(b => b.content).join('\n\n');
+    onChange(newContent);
   };
 
-  const handleGlobalClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      const lastIndex = blocks.length - 1;
-      if (blocks[lastIndex].trim() !== '') {
-        onChange(content + '\n\n');
-        setActiveBlockIndex(blocks.length);
-      } else {
-        setActiveBlockIndex(lastIndex);
-      }
+  const handleBlockChange = (idx: number, newVal: string) => {
+    const newBlocks = [...internalBlocks];
+    newBlocks[idx] = { ...newBlocks[idx], content: newVal };
+    setInternalBlocks(newBlocks);
+    syncToParent(newBlocks);
+  };
+
+  const handlePasteImage = async (idx: number, file: File) => {
+    const processImage = (imageMarkdown: string) => {
+      const newBlocks = [...internalBlocks];
+      newBlocks[idx] = { ...newBlocks[idx], content: imageMarkdown };
+      newBlocks.splice(idx + 1, 0, { id: generateId(), content: '' });
+      setInternalBlocks(newBlocks);
+      syncToParent(newBlocks);
+      setActiveIdx(idx + 1);
+    };
+
+    if (!projectHandle) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        if (dataUrl.length > 2 * 1024 * 1024) {
+          alert("图片太大，建议打开本地工作区（Workspace）以支持大图片存储。");
+        }
+        processImage(`![Pasted Image](${dataUrl})`);
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    try {
+      const assetsHandle = await projectHandle.getDirectoryHandle('assets', { create: true });
+      const ext = file.name.split('.').pop() || 'png';
+      const filename = `img_${Date.now()}.${ext}`;
+      const fileHandle = await assetsHandle.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(file);
+      await writable.close();
+      processImage(`![Image](assets/${filename})`);
+    } catch (error) {
+      console.error("Save image failed:", error);
+      const reader = new FileReader();
+      reader.onload = (e) => processImage(`![Pasted Image](${e.target?.result})`);
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleContextMenuAction = (action: string, index: number) => {
-    const newBlocks = [...blocks];
-    const current = blocks[index].replace(/^#+\s|^>\s|^-\s|^\d+\.\s/, '');
+  const handleContextAction = (action: string) => {
+    const idx = activeIdx === null ? internalBlocks.length - 1 : activeIdx;
+    if (idx < 0) return;
+    
+    const newBlocks = [...internalBlocks];
+    const currentBlock = newBlocks[idx];
+    const cleanPrefix = (str: string) => str.replace(/^(#+\s+|> \s*|[\-\*]\s*|\d+\.\s*)/, '');
 
     switch (action) {
-      case 'copy':
-        navigator.clipboard.writeText(blocks[index]);
-        break;
       case 'delete':
-        if (blocks.length > 1) {
-          newBlocks.splice(index, 1);
-          onChange(newBlocks.join('\n\n'));
+        if (newBlocks.length > 1) {
+          newBlocks.splice(idx, 1);
+          setInternalBlocks(newBlocks);
+          syncToParent(newBlocks);
+          setActiveIdx(idx > 0 ? idx - 1 : 0);
         } else {
-          updateBlock(0, '');
+          handleBlockChange(idx, '');
         }
         break;
       case 'insertAbove':
-        newBlocks.splice(index, 0, '');
-        onChange(newBlocks.join('\n\n'));
-        setActiveBlockIndex(index);
+        newBlocks.splice(idx, 0, { id: generateId(), content: '' });
+        setInternalBlocks(newBlocks);
+        syncToParent(newBlocks);
+        setActiveIdx(idx);
         break;
       case 'insertBelow':
-        newBlocks.splice(index + 1, 0, '');
-        onChange(newBlocks.join('\n\n'));
-        setActiveBlockIndex(index + 1);
+        newBlocks.splice(idx + 1, 0, { id: generateId(), content: '' });
+        setInternalBlocks(newBlocks);
+        syncToParent(newBlocks);
+        setActiveIdx(idx + 1);
         break;
-      case 'h1': updateBlock(index, '# ' + current); break;
-      case 'h2': updateBlock(index, '## ' + current); break;
-      case 'h3': updateBlock(index, '### ' + current); break;
-      case 'quote': updateBlock(index, '> ' + current); break;
-      case 'bullet': updateBlock(index, '- ' + current); break;
-      case 'number': updateBlock(index, '1. ' + current); break;
-      case 'code': updateBlock(index, '```\n' + current + '\n```'); break;
-      case 'math': updateBlock(index, '$$\n' + current + '\n$$'); break;
-      case 'table':
-        updateBlock(index, '| Column 1 | Column 2 |\n| --- | --- |\n| Content | Content |');
+      case 'copy':
+        navigator.clipboard.writeText(currentBlock.content);
         break;
+      case 'h1': handleBlockChange(idx, '# ' + cleanPrefix(currentBlock.content)); break;
+      case 'h2': handleBlockChange(idx, '## ' + cleanPrefix(currentBlock.content)); break;
+      case 'h3': handleBlockChange(idx, '### ' + cleanPrefix(currentBlock.content)); break;
+      case 'bold': {
+        const text = currentBlock.content.trim() || '加粗文字';
+        const newVal = text.startsWith('**') && text.endsWith('**') 
+          ? text.slice(2, -2) 
+          : `**${text}**`;
+        handleBlockChange(idx, newVal);
+        break;
+      }
+      case 'italic': {
+        const text = currentBlock.content.trim() || '斜体文字';
+        const newVal = text.startsWith('*') && text.endsWith('*') 
+          ? text.slice(1, -1) 
+          : `*${text}*`;
+        handleBlockChange(idx, newVal);
+        break;
+      }
+      case 'quote': handleBlockChange(idx, '> ' + cleanPrefix(currentBlock.content)); break;
+      case 'list': 
+      case 'bullet': handleBlockChange(idx, '- ' + cleanPrefix(currentBlock.content)); break;
+      case 'number': handleBlockChange(idx, '1. ' + cleanPrefix(currentBlock.content)); break;
+      case 'code': handleBlockChange(idx, '```javascript\n// 在此输入代码\n\n```'); break;
+      case 'math': handleBlockChange(idx, '$$\n\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}\n$$'); break;
+      case 'table': handleBlockChange(idx, '| 标题 1 | 标题 2 | 标题 3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |'); break;
+      case 'hr': handleBlockChange(idx, '---'); break;
     }
+    // 动作完成后，保持对当前块的激活
+    setActiveIdx(idx);
   };
 
+  useImperativeHandle(ref, () => ({
+    focusLast: () => {
+      if (internalBlocks.length > 0) setActiveIdx(internalBlocks.length - 1);
+    },
+    applyAction: (action) => handleContextAction(action),
+    handlePasteImage: (file) => {
+      const idx = activeIdx === null ? internalBlocks.length - 1 : activeIdx;
+      handlePasteImage(idx >= 0 ? idx : 0, file);
+    }
+  }));
+
   return (
-    <div 
-      className="w-full flex-1 flex flex-col px-8 md:px-0 py-16 cursor-text" 
-      onClick={handleGlobalClick}
-    >
-      <div className="flex flex-col w-full space-y-1">
-        {blocks.map((blockContent, idx) => (
+    <div className="w-full min-h-full">
+      <div className="flex flex-col">
+        {internalBlocks.map((block, i) => (
           <Block 
-            key={`block-${idx}`}
-            content={blockContent}
+            key={block.id}
+            content={block.content}
+            isActive={activeIdx === i}
             projectHandle={projectHandle}
-            isActive={activeBlockIndex === idx}
-            onFocus={() => setActiveBlockIndex(idx)}
-            onChange={(newVal) => updateBlock(idx, newVal)}
-            onKeyDown={(e) => {
-               if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                const newBlocks = [...blocks];
-                newBlocks.splice(idx + 1, 0, '');
-                onChange(newBlocks.join('\n\n'));
-                setActiveBlockIndex(idx + 1);
-              } else if (e.key === 'Backspace' && blocks[idx] === '' && blocks.length > 1) {
-                e.preventDefault();
-                const newBlocks = [...blocks];
-                newBlocks.splice(idx, 1);
-                onChange(newBlocks.join('\n\n'));
-                setActiveBlockIndex(idx > 0 ? idx - 1 : 0);
-              }
-            }}
-            onPasteImage={(data) => {}}
+            onFocus={() => setActiveIdx(i)}
+            onChange={(val) => handleBlockChange(i, val)}
+            onPasteImage={(file) => handlePasteImage(i, file)}
             onContextMenu={(e) => {
               e.preventDefault();
-              setMenuConfig({ x: e.clientX, y: e.clientY, index: idx });
+              setActiveIdx(i);
+              setMenuPos({ x: e.clientX, y: e.clientY });
+            }}
+            onKeyDown={(e) => {
+              const isInsideFence = block.content.trim().startsWith('```') || block.content.trim().startsWith('$$');
+              if (e.key === 'Enter' && !e.shiftKey && !isInsideFence) {
+                e.preventDefault();
+                const newBlocks = [...internalBlocks];
+                newBlocks.splice(i + 1, 0, { id: generateId(), content: '' });
+                setInternalBlocks(newBlocks);
+                syncToParent(newBlocks);
+                setActiveIdx(i + 1);
+              } else if (e.key === 'Backspace' && block.content === '' && internalBlocks.length > 1) {
+                e.preventDefault();
+                const newBlocks = [...internalBlocks];
+                newBlocks.splice(i, 1);
+                setInternalBlocks(newBlocks);
+                syncToParent(newBlocks);
+                setActiveIdx(i > 0 ? i - 1 : 0);
+              }
             }}
           />
         ))}
       </div>
-      <div className="flex-grow min-h-[50vh]" onClick={handleGlobalClick} />
-      
-      {menuConfig && (
-        <ContextMenu 
-          x={menuConfig.x} 
-          y={menuConfig.y} 
-          onClose={() => setMenuConfig(null)}
-          onAction={(action) => handleContextMenuAction(action, menuConfig.index)}
-        />
-      )}
+      {menuPos && <ContextMenu x={menuPos.x} y={menuPos.y} onClose={() => setMenuPos(null)} onAction={handleContextAction} />}
     </div>
   );
 });

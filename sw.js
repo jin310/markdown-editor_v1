@@ -1,20 +1,18 @@
 
-const CACHE_NAME = 'novascribe-v1';
-const ASSETS_TO_CACHE = [
+const CACHE_NAME = 'novascribe-v4';
+
+// 预缓存列表
+const PRECACHE_ASSETS = [
   './',
   './index.html',
   './index.css',
   './manifest.json',
-  'https://cdn.tailwindcss.com',
-  'https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap',
   'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_ASSETS))
   );
   self.skipWaiting();
 });
@@ -31,18 +29,27 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request).then((fetchResponse) => {
-        // 对于第三方 CDN 资源进行动态缓存
-        if (event.request.url.includes('esm.sh') || event.request.url.includes('cdn')) {
-          return caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, fetchResponse.clone());
-            return fetchResponse;
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) return cachedResponse;
+
+      return fetch(event.request).then((response) => {
+        // 如果是第三方资源（如字体、CDN），也进行缓存
+        if (response && response.status === 200) {
+          const resClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, resClone);
           });
         }
-        return fetchResponse;
+        return response;
+      }).catch(() => {
+        // 离线且无缓存时，重定向到首页
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
       });
-    }).catch(() => caches.match('./index.html'))
+    })
   );
 });

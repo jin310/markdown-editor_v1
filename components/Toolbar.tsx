@@ -21,18 +21,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onImageUpload, onAction }) => 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const tools = [
-    { icon: Heading1, label: 'H1', action: 'h1' },
-    { icon: Heading2, label: 'H2', action: 'h2' },
-    { icon: Bold, label: 'Bold', action: 'bold' },
-    { icon: Italic, label: 'Italic', action: 'italic' },
-    { icon: List, label: 'Bullet', action: 'list' },
-    { icon: Code, label: 'Code', action: 'code' },
-    { icon: Sigma, label: 'Math', action: 'math' },
-    { icon: ImageIcon, label: 'Image', action: 'image' },
-    { icon: Table, label: 'Table', action: 'table' },
+    { icon: Heading1, action: 'h1', desc: '一级标题' },
+    { icon: Heading2, action: 'h2', desc: '二级标题' },
+    { icon: Bold, action: 'bold', desc: '加粗' },
+    { icon: Italic, action: 'italic', desc: '斜体' },
+    { icon: List, action: 'list', desc: '无序列表' },
+    { icon: Code, action: 'code', desc: '代码块' },
+    { icon: Sigma, action: 'math', desc: '公式块' },
+    { icon: ImageIcon, action: 'image', desc: '插入图片' },
+    { icon: Table, action: 'table', desc: '表格' },
   ];
 
-  const handleToolClick = (action: string) => {
+  const handleToolClick = (e: React.MouseEvent, action: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (action === 'image') {
       fileInputRef.current?.click();
     } else {
@@ -44,7 +46,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onImageUpload, onAction }) => 
     const file = e.target.files?.[0];
     if (file) {
       onImageUpload(file);
-      // Reset input so the same file can be uploaded again if deleted
       e.target.value = '';
     }
   };
@@ -58,18 +59,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onImageUpload, onAction }) => 
         accept="image/*" 
         onChange={handleFileChange}
       />
-      <div className="fixed bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 bg-white/90 backdrop-blur-md border border-gray-200 rounded-2xl shadow-xl z-50">
+      <div className="flex items-center gap-1 px-4 py-2 bg-white border border-slate-100 rounded-2xl shadow-[0_10px_50px_rgba(0,0,0,0.08)] transition-all">
         {tools.map((tool, i) => (
           <button 
             key={i}
-            onClick={() => handleToolClick(tool.action)}
-            className="p-2.5 hover:bg-gray-100 rounded-xl text-gray-600 transition-all active:scale-90 group relative"
-            title={tool.label}
+            onMouseDown={(e) => handleToolClick(e, tool.action)}
+            className="group relative flex items-center justify-center w-10 h-10 hover:bg-slate-50 active:bg-slate-100 rounded-xl transition-colors"
           >
-            <tool.icon size={18} />
-            <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-              {tool.label}
-            </span>
+            <div className="text-slate-600 group-hover:text-slate-900 transition-colors">
+              <tool.icon size={19} strokeWidth={1.8} />
+            </div>
+            
+            {/* Tooltip */}
+            <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+              {tool.desc}
+            </div>
           </button>
         ))}
       </div>

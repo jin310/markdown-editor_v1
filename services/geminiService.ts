@@ -2,48 +2,17 @@
 import { GoogleGenAI } from "@google/genai";
 
 export class GeminiService {
-  private getClient() {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      console.warn("GeminiService: API_KEY is missing.");
-      return null;
-    }
-    return new GoogleGenAI({ apiKey });
-  }
-
-  async polishMarkdown(content: string, instruction: string = "Polish this markdown text for better clarity and flow.") {
-    const ai = this.getClient();
-    if (!ai) return content;
-    
+  async polishMarkdown(content: string) {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `${instruction}\n\nReturn only the improved markdown content.\n\nContent:\n${content}`,
-        config: {
-            temperature: 0.7,
-            topP: 0.95,
-        }
+        contents: [{ parts: [{ text: `你是一个专业的文案编辑。请润色以下 Markdown 文本，使其逻辑更清晰、表达更专业，但保留原有的格式。请直接返回修改后的 Markdown：\n\n${content}` }] }],
       });
       return response.text || content;
     } catch (error) {
-      console.error("Gemini Polish Error:", error);
-      return content;
-    }
-  }
-
-  async generateSummary(content: string) {
-    const ai = this.getClient();
-    if (!ai) return "AI service not configured.";
-    
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Summarize the following markdown document briefly:\n\n${content}`,
-      });
-      return response.text || "No summary available.";
-    } catch (error) {
-      console.error("Gemini Summary Error:", error);
-      return "Error generating summary.";
+      console.error("AI 润色失败:", error);
+      throw error;
     }
   }
 }

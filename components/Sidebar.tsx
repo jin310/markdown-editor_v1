@@ -1,310 +1,248 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Document } from '../types';
-import { 
-  FileText, 
-  Plus, 
-  Search, 
-  Trash2, 
-  ChevronLeft,
-  Clock,
-  FolderOpen,
-  CheckCircle2,
-  ChevronRight,
-  ChevronDown,
-  Folder,
-  File,
-  List,
-  X
-} from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { FileText, Plus, ChevronLeft, ChevronDown, ChevronRight, X, File as LucideFile, Folder, FolderOpen, List } from 'lucide-react';
 
-interface SidebarProps {
-  isOpen: boolean;
-  documents: Document[];
-  activeId: string;
-  activeContent: string;
-  projectHandle: FileSystemDirectoryHandle | null;
-  onOpenWorkspace: () => void;
-  onCloseWorkspace: () => void;
-  onSelect: (id: string) => void;
-  onFileSelect: (handle: FileSystemFileHandle) => void;
-  onRenameFile: (handle: FileSystemFileHandle, newName: string) => Promise<void>;
-  onRenameDraft: (id: string, newTitle: string) => void;
-  onCreate: () => void;
-  onDelete: (id: string) => void;
-  onToggle: () => void;
-}
+const SKIP = new Set(['node_modules', '.git', 'dist', 'venv', 'target', '.DS_Store']);
 
-export const Sidebar: React.FC<SidebarProps> = ({ 
+export const Sidebar: React.FC<any> = ({ 
   isOpen, 
   documents, 
   activeId, 
-  activeContent,
-  projectHandle,
-  onOpenWorkspace,
-  onCloseWorkspace,
+  activeContent, 
+  projectHandle, 
+  onOpenWorkspace, 
+  onCloseWorkspace, 
   onSelect, 
-  onFileSelect,
-  onRenameFile,
-  onRenameDraft,
+  onFileSelect, 
   onCreate, 
-  onDelete, 
   onToggle 
 }) => {
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [holdingId, setHoldingId] = useState<string | null>(null);
-  const [tempTitle, setTempTitle] = useState("");
-  const [viewMode, setViewMode] = useState<'files' | 'outline'>('files');
-  const holdTimerRef = useRef<number | null>(null);
-
-  const startHoldTimer = (id: string, initialTitle: string) => {
-    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
-    setHoldingId(id);
-    holdTimerRef.current = window.setTimeout(() => {
-      setRenamingId(id);
-      setTempTitle(initialTitle);
-      setHoldingId(null);
-      holdTimerRef.current = null;
-    }, 600);
-  };
-
-  const clearHoldTimer = () => {
-    setHoldingId(null);
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-  };
-
-  const handleRenameSubmit = (id: string) => {
-    if (tempTitle.trim()) onRenameDraft(id, tempTitle.trim());
-    setRenamingId(null);
-  };
-
-  const outline = useMemo(() => {
-    const lines = activeContent.split('\n');
-    return lines
-      .filter(line => line.trim().startsWith('#'))
-      .map((line, idx) => {
-        const levelMatch = line.trim().match(/^#+/);
-        const level = levelMatch ? levelMatch[0].length : 1;
-        const text = line.trim().replace(/^#+\s/, '');
-        return { id: idx, level, text };
-      });
-  }, [activeContent]);
+  const [tab, setTab] = useState<'files' | 'outline'>('files');
 
   return (
-    <aside className={`${isOpen ? 'w-72' : 'w-0 opacity-0'} h-full bg-[#f8f9fa] border-r border-gray-200 transition-all duration-300 flex flex-col overflow-hidden relative z-40 shadow-inner`}>
-      <div className="p-4 flex items-center justify-between bg-white/50 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-md">
-            M
-          </div>
-          <span className="font-bold text-gray-800 tracking-tight">NovaScribe</span>
+    <aside className={`${isOpen ? 'w-64' : 'w-0 opacity-0'} h-full bg-[#fdfdfd] border-r border-slate-100 flex flex-col transition-all duration-300 overflow-hidden z-20`}>
+      <div className="p-5 flex items-center justify-between">
+        <div className="flex items-center gap-2 font-black text-slate-900 tracking-tighter text-lg uppercase">NovaScribe</div>
+        <button onClick={onToggle} className="p-1 hover:bg-slate-100 rounded text-slate-400"><ChevronLeft size={16} /></button>
+      </div>
+
+      <div className="px-4 mb-4">
+        <div className="flex p-1 bg-slate-100 rounded-xl">
+          <button 
+            onClick={() => setTab('files')}
+            className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === 'files' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <Folder size={14} /> 文件
+          </button>
+          <button 
+            onClick={() => setTab('outline')}
+            className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === 'outline' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <List size={14} /> 大纲
+          </button>
         </div>
-        <button onClick={onToggle} className="p-1.5 hover:bg-gray-200 rounded-md text-gray-500 transition-colors">
-          <ChevronLeft size={18} />
-        </button>
       </div>
 
-      <div className="px-4 py-3 flex gap-1">
-        <button 
-          onClick={() => setViewMode('files')}
-          className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded-lg transition-all ${viewMode === 'files' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-        >
-          <Folder size={14} /> 文件
-        </button>
-        <button 
-          onClick={() => setViewMode('outline')}
-          className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded-lg transition-all ${viewMode === 'outline' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-        >
-          <List size={14} /> 大纲
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-2 custom-scrollbar space-y-4 pb-4 select-none">
-        {viewMode === 'files' ? (
+      <div className="flex-1 overflow-y-auto px-3 space-y-6 custom-scrollbar pb-10">
+        {tab === 'files' ? (
           <>
-            <div className="px-2 flex flex-col gap-2 mb-4">
-              <button onClick={onCreate} className="w-full flex items-center justify-center gap-2 py-2 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all text-xs font-bold">
-                <Plus size={14} /> 新建草稿
+            <div className="space-y-2">
+              <button onClick={onCreate} className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-black transition-colors shadow-lg shadow-slate-200">
+                <Plus size={14} className="inline mr-2" />新建草稿
               </button>
               {!projectHandle ? (
-                <button onClick={onOpenWorkspace} className="w-full flex items-center justify-center gap-2 py-2 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all text-xs font-semibold text-gray-700">
-                  <FolderOpen size={14} /> 打开工作区
+                <button onClick={onOpenWorkspace} className="w-full py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-slate-400 transition-colors">
+                  打开工作区
                 </button>
               ) : (
-                <button onClick={onCloseWorkspace} className="w-full flex items-center justify-center gap-2 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl transition-all text-xs font-semibold">
-                  <X size={14} /> 关闭工作区
+                <button onClick={onCloseWorkspace} className="w-full py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-red-100 flex items-center justify-center gap-1">
+                  <X size={12} /> 关闭工作区
                 </button>
               )}
             </div>
-            
-            <div className="space-y-6">
-              {projectHandle && (
-                <div>
-                  <div className="px-3 mb-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center justify-between">
-                    <span className="flex items-center gap-2"><FolderOpen size={10} /> {projectHandle.name}</span>
-                  </div>
-                  <div className="bg-white/40 rounded-xl py-1 overflow-hidden border border-gray-100">
-                    <FileTree handle={projectHandle} onFileSelect={onFileSelect} activeId={activeId} />
-                  </div>
-                </div>
-              )}
-              
+
+            {projectHandle && (
               <div>
-                <div className="px-3 mb-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                  <Clock size={10} /> 最近草稿
+                <div className="px-2 mb-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">当前工作区</div>
+                <div className="bg-slate-50/50 rounded-xl p-1">
+                  <FileTree handle={projectHandle} onSelect={onFileSelect} activeId={activeId} />
                 </div>
-                {documents.length > 0 ? documents.map(doc => (
-                  <div
-                    key={doc.id}
-                    onClick={() => activeId !== doc.id && onSelect(doc.id)}
-                    onMouseDown={() => startHoldTimer(doc.id, doc.title)}
-                    onMouseUp={clearHoldTimer}
-                    onMouseLeave={clearHoldTimer}
-                    className={`group flex items-center justify-between gap-3 px-3 py-2 rounded-xl cursor-pointer transition-all mb-1 ${activeId === doc.id ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`}
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <FileText size={15} className={activeId === doc.id ? 'text-indigo-100' : 'text-gray-400'} />
-                      {renamingId === doc.id ? (
-                        <input 
-                          autoFocus 
-                          className="w-full bg-transparent outline-none text-xs font-medium border-b border-indigo-300" 
-                          value={tempTitle} 
-                          onChange={e => setTempTitle(e.target.value)} 
-                          onBlur={() => handleRenameSubmit(doc.id)} 
-                          onKeyDown={e => e.key === 'Enter' && handleRenameSubmit(doc.id)} 
-                          onClick={e => e.stopPropagation()} 
-                        />
-                      ) : (
-                        <span className="text-xs font-medium truncate">{doc.title || '无标题'}</span>
-                      )}
-                    </div>
-                  </div>
-                )) : (
-                  <div className="px-4 py-6 text-center text-[10px] text-gray-300 italic">暂无本地草稿</div>
-                )}
               </div>
+            )}
+
+            <div>
+              <div className="px-2 mb-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">最近草稿</div>
+              {documents.map((d: any) => (
+                <div 
+                  key={d.id} 
+                  onClick={() => onSelect(d.id)} 
+                  className={`px-3 py-2 rounded-xl cursor-pointer text-xs font-bold truncate mb-1 transition-all flex items-center gap-2 ${activeId === d.id ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                  <FileText size={14} className={`opacity-60 ${activeId === d.id ? 'text-white' : 'text-indigo-400'}`}/>
+                  {d.title}
+                </div>
+              ))}
             </div>
           </>
         ) : (
-          <div className="py-2 px-3 space-y-1">
-            {outline.length > 0 ? outline.map((item, i) => (
-              <div 
-                key={i} 
-                className="group text-xs text-gray-500 hover:text-indigo-600 cursor-pointer py-2 truncate border-l-2 border-transparent hover:border-indigo-300 transition-all flex items-center"
-                style={{ paddingLeft: `${(item.level - 1) * 12 + 8}px` }}
-                onClick={() => {
-                  const elements = document.querySelectorAll('.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4');
-                  // Rough matching based on text content since index might vary if blocks change
-                  const matched = Array.from(elements).find(el => el.textContent?.includes(item.text));
-                  if (matched) {
-                    matched.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  } else {
-                    // Fallback to indexed scroll
-                    elements[i]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }
-                }}
-              >
-                <ChevronRight size={10} className="opacity-0 group-hover:opacity-100 transition-opacity mr-1" />
-                <span className={item.level === 1 ? 'font-bold' : ''}>{item.text}</span>
-              </div>
-            )) : (
-              <div className="text-[10px] text-gray-300 italic text-center py-10">暂无大纲内容</div>
-            )}
-          </div>
+          <OutlineView content={activeContent} />
         )}
-      </div>
-
-      <div className="p-4 border-t border-gray-200 bg-white flex items-center justify-between text-[9px] font-bold text-gray-400 uppercase tracking-widest">
-        <span>V1.2.5 Stable</span>
-        <div className="flex items-center gap-1">
-           <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
-           LOCAL ONLY
-        </div>
       </div>
     </aside>
   );
 };
 
-interface FileTreeProps {
-  handle: FileSystemDirectoryHandle;
-  onFileSelect: (handle: FileSystemFileHandle) => void;
-  activeId: string;
-  depth?: number;
-}
+const OutlineView: React.FC<{ content: string }> = ({ content }) => {
+  const headings = useMemo(() => {
+    const lines = content.split('\n');
+    const result: { level: number; text: string; id: number }[] = [];
+    let inCodeBlock = false;
 
-const FileTree: React.FC<FileTreeProps> = ({ handle, onFileSelect, activeId, depth = 0 }) => {
-  const [entries, setEntries] = useState<FileSystemHandle[]>([]);
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('```')) inCodeBlock = !inCodeBlock;
+      if (inCodeBlock) return;
+
+      const match = trimmed.match(/^(#{1,6})\s+(.*)$/);
+      if (match) {
+        result.push({
+          level: match[1].length,
+          text: match[2],
+          id: index
+        });
+      }
+    });
+    return result;
+  }, [content]);
+
+  const scrollToHeading = (index: number) => {
+    const blocks = document.querySelectorAll('.markdown-block');
+    // 注意：编辑器是基于块的，大纲的 index 可能不完全对应 block 的 index
+    // 但我们的 splitMarkdownIntoBlocks 是基于空行的
+    // 这里的简易实现是查找包含该文字的块
+    const headingText = headings.find(h => h.id === index)?.text;
+    if (headingText) {
+      const targetBlock = Array.from(blocks).find(b => b.textContent?.includes(headingText));
+      targetBlock?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  if (headings.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3 opacity-60">
+        <List size={24} />
+        <span className="text-[11px] font-medium">暂无标题大纲</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="px-2 mb-4 text-[9px] font-bold text-slate-400 uppercase tracking-widest">文档大纲</div>
+      {headings.map((h, i) => (
+        <div 
+          key={i}
+          onClick={() => scrollToHeading(h.id)}
+          className="group flex items-center gap-2 px-3 py-1.5 cursor-pointer rounded-lg hover:bg-slate-50 transition-all"
+          style={{ paddingLeft: `${(h.level - 1) * 12 + 12}px` }}
+        >
+          <span className={`text-[11px] font-medium truncate ${h.level === 1 ? 'text-slate-900 font-bold' : 'text-slate-500'}`}>
+            {h.text}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const FileTree: React.FC<any> = ({ handle, onSelect, activeId, depth = 0 }) => {
+  const [entries, setEntries] = useState<any[]>([]);
   const [isExpanded, setIsExpanded] = useState(depth === 0);
 
   useEffect(() => {
-    const load = async () => {
+    (async () => {
+      if (!isExpanded && depth > 0) return;
+      const res = [];
       try {
-        const res: FileSystemHandle[] = [];
-        // @ts-ignore
-        for await (const entry of handle.values()) {
-          if (!entry.name.startsWith('.')) {
-            res.push(entry);
+        for await (const entry of handle.values()) { 
+          if (!entry.name.startsWith('.') && !SKIP.has(entry.name)) {
+            res.push(entry); 
           }
         }
-        // Directories first, then alphabetically
-        res.sort((a, b) => {
+        setEntries(res.sort((a, b) => {
           if (a.kind === b.kind) return a.name.localeCompare(b.name);
           return a.kind === 'directory' ? -1 : 1;
-        });
-        setEntries(res);
-      } catch (err) {
-        console.error("Error loading directory entries:", err);
+        }));
+      } catch (e) {
+        console.error("读取目录出错:", e);
       }
-    };
-    if (isExpanded) {
-        load();
-    }
-  }, [handle, isExpanded]);
+    })();
+  }, [handle, isExpanded, depth]);
 
   const toggleExpand = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsExpanded(!isExpanded);
   };
 
-  return (
-    <div className="flex flex-col select-none">
-      {depth > 0 && (
+  const isDirectory = handle.kind === 'directory';
+
+  if (depth > 0 && isDirectory) {
+    return (
+      <div className="w-full">
         <div 
-          onClick={toggleExpand} 
-          className={`flex items-center gap-2 px-3 py-1.5 hover:bg-indigo-50/50 cursor-pointer text-gray-600 transition-colors group rounded-lg mx-1 my-0.5`} 
-          style={{ paddingLeft: `${depth * 10 + 8}px` }}
+          onClick={toggleExpand}
+          className="flex items-center gap-1.5 px-2 py-1.5 cursor-pointer hover:bg-slate-100 rounded-lg text-[11px] font-semibold text-slate-600 transition-colors"
+          style={{ paddingLeft: `${depth * 12}px` }}
         >
-          <div className="transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none' }}>
-            <ChevronRight size={12} className="text-gray-400 group-hover:text-indigo-400" />
-          </div>
-          <Folder size={14} className="text-amber-400 fill-amber-400" />
-          <span className="text-xs font-medium truncate">{handle.name}</span>
+          {isExpanded ? <ChevronDown size={12} className="opacity-40" /> : <ChevronRight size={12} className="opacity-40" />}
+          {isExpanded ? <FolderOpen size={14} className="text-amber-400" /> : <Folder size={14} className="text-amber-400" />}
+          <span className="truncate">{handle.name}</span>
         </div>
-      )}
-      {(isExpanded || depth === 0) && entries.map(e => (
-        e.kind === 'directory' ? (
+        {isExpanded && (
+          <div className="mt-0.5">
+            {entries.map(e => (
+              <FileTree 
+                key={e.name} 
+                handle={e} 
+                onSelect={onSelect} 
+                activeId={activeId} 
+                depth={depth + 1} 
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isDirectory) {
+    return (
+      <div className="space-y-0.5">
+        {entries.map(e => (
           <FileTree 
             key={e.name} 
-            handle={e as FileSystemDirectoryHandle} 
-            onFileSelect={onFileSelect} 
+            handle={e} 
+            onSelect={onSelect} 
             activeId={activeId} 
             depth={depth + 1} 
           />
-        ) : (
-          <div 
-            key={e.name} 
-            onClick={() => activeId !== e.name && onFileSelect(e as FileSystemFileHandle)} 
-            className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-all group rounded-lg mx-1 my-0.5 ${activeId === e.name ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-indigo-50/50 text-gray-500'}`} 
-            style={{ paddingLeft: `${(depth + 1) * 10 + 12}px` }}
-          >
-            <FileText size={14} className={activeId === e.name ? 'text-indigo-100' : 'text-gray-400 group-hover:text-indigo-400'} />
-            <span className="text-xs truncate font-medium">{e.name}</span>
-          </div>
-        )
-      ))}
+        ))}
+      </div>
+    );
+  }
+
+  const isSelected = activeId === handle.name;
+  const isMarkdown = handle.name.toLowerCase().endsWith('.md');
+
+  return (
+    <div 
+      onClick={() => isMarkdown && onSelect(handle)} 
+      className={`group flex items-center gap-2 px-3 py-1.5 cursor-pointer text-[11px] font-medium truncate rounded-lg transition-colors mb-0.5 ${isSelected ? 'bg-indigo-100 text-indigo-700 font-bold' : isMarkdown ? 'hover:bg-slate-100 text-slate-500' : 'opacity-40 grayscale cursor-not-allowed'}`}
+      style={{ paddingLeft: `${depth * 12}px` }}
+      title={isMarkdown ? handle.name : '仅支持 .md 文件'}
+    >
+      <LucideFile size={12} className={`shrink-0 ${isSelected ? 'text-indigo-600' : 'text-slate-400 opacity-60'}`}/>
+      <span className="truncate">{handle.name}</span>
     </div>
   );
 };

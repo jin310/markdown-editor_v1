@@ -5,8 +5,8 @@ on:
   push:
     branches:
       - main
-      - master  # 同时兼容 main 和 master 分支
-  workflow_dispatch: # 允许在 GitHub 页面上手动点击运行
+      - master
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,14 +24,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          # 移除了 cache: 'npm'，解决 "lock file not found" 错误
 
       - name: Install and Build
         run: |
           npm install
           npm run build
         env:
-          # 如果你在 GitHub Secrets 里配置了 API_KEY，构建时会自动注入
           API_KEY: ${{ secrets.API_KEY }}
 
       - name: Deploy

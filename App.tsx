@@ -5,7 +5,7 @@ import { Editor } from './components/Editor';
 import { Toolbar } from './components/Toolbar';
 import { Document, Stats } from './types';
 import { geminiService } from './services/geminiService';
-import { PanelLeft, Info, FileText, Save, Sparkles, Loader2 } from 'lucide-react';
+import { PanelLeft, Info, FileText, Sparkles, Loader2 } from 'lucide-react';
 
 const STORAGE_KEY = 'novascribe_docs';
 
@@ -48,6 +48,8 @@ const App: React.FC = () => {
     try {
       const polished = await geminiService.polishMarkdown(activeDoc.content);
       updateContent(polished);
+      // 润色后自动回到顶部
+      document.querySelector('main > div')?.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
       console.error("AI Polish failed", error);
     } finally {
@@ -148,10 +150,14 @@ const App: React.FC = () => {
             <button 
               onClick={handleAiPolish}
               disabled={isAiProcessing}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isAiProcessing ? 'bg-indigo-50 text-indigo-300' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100'}`}
+              className={`group flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${isAiProcessing ? 'bg-indigo-50 text-indigo-300' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100 hover:shadow-indigo-200'}`}
             >
-              {isAiProcessing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              AI 润色
+              {isAiProcessing ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Sparkles size={14} className="group-hover:animate-pulse" />
+              )}
+              {isAiProcessing ? 'AI 思考中...' : 'AI 润色'}
             </button>
             <button className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
               <Info size={18} />
@@ -160,7 +166,7 @@ const App: React.FC = () => {
         </header>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#fdfdfd]">
-          <div className="max-w-3xl mx-auto min-h-full flex flex-col">
+          <div className="max-w-3xl mx-auto min-h-full flex flex-col pb-32">
             <Editor 
               content={activeDoc.content}
               projectHandle={projectHandle}

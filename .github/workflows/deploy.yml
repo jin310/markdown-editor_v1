@@ -1,0 +1,41 @@
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master  # 同时兼容 main 和 master 分支
+  workflow_dispatch: # 允许在 GitHub 页面上手动点击运行
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install and Build
+        run: |
+          npm install
+          npm run build
+        env:
+          # 如果你在 GitHub Secrets 里配置了 API_KEY，构建时会自动注入
+          API_KEY: ${{ secrets.API_KEY }}
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist
+          branch: gh-pages

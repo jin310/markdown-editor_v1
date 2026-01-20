@@ -4,9 +4,9 @@ import { Editor, EditorRef } from './components/Editor';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { geminiService } from './services/geminiService';
-import { PanelLeft, Sparkles, Loader2, Save, FileDown } from 'lucide-react';
+import { PanelLeft, Sparkles, Loader2, Save, FileDown, Check } from 'lucide-react';
 
-// html2pdf.js 在打包环境下通常需要动态引入或特定的导入方式
+// 使用 UMD 路径引入，增加构建兼容性
 // @ts-ignore
 import html2pdf from 'html2pdf.js/dist/html2pdf.min.js';
 
@@ -15,15 +15,23 @@ const STORAGE_KEY = 'novascribe_docs';
 const App: React.FC = () => {
   const [docs, setDocs] = useState<any[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [{ id: '1', title: '快速入门', content: '# 欢迎使用 NovaScribe\n\n这是一个类似于 Typora 的**所见即所得** Markdown 编辑器。\n\n- **点击**任意段落进行编辑\n- **回车**创建新段落\n- **AI 润色**一键美化内容', lastModified: Date.now() }];
+    return saved ? JSON.parse(saved) : [{ 
+      id: '1', 
+      title: '快速入门', 
+      content: '# 欢迎使用 NovaScribe\n\n这是一个类似于 Typora 的**所见即所得** Markdown 编辑器。\n\n- **点击**任意段落进行编辑\n- **回车**创建新段落\n- **AI 润色**一键美化内容\n\n试试在下方输入一些内容吧！', 
+      lastModified: Date.now() 
+    }];
   });
   
   const [activeId, setActiveId] = useState(docs[0]?.id || '1');
-  const [activeFileHandle, setActiveFileHandle] = useState<FileSystemFileHandle | null>(null);
+  const [activeFileHandle, setActiveFileHandle] = useState<any>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [projectHandle, setProjectHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [projectHandle, setProjectHandle] = useState<any>(null);
+  const [isAllSelected, setIsAllSelected] = useState(false);
+  const [showCopyFeedback, setShowCopyFeedback] = useState(false);
+  
   const editorRef = useRef<EditorRef>(null);
 
   const activeDoc = useMemo(() => docs.find(d => d.id === activeId) || docs[0], [docs, activeId]);
@@ -31,6 +39,42 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
   }, [docs]);
+
+  // 全局键盘监听：全选与复制
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMod = e.ctrlKey || e.metaKey;
+      
+      // Ctrl + A 全选逻辑
+      if (isMod && e.key === 'a') {
+        // 如果不在输入框内，或者已经全选了输入框内容，则执行全局全选
+        const activeElement = document.activeElement;
+        const isInput = activeElement instanceof HTMLTextAreaElement || activeElement instanceof HTMLInputElement;
+        
+        if (!isInput || (isInput && (activeElement as any).selectionEnd - (activeElement as any).selectionStart === (activeElement as any).value.length)) {
+          e.preventDefault();
+          setIsAllSelected(true);
+        }
+      }
+
+      // Ctrl + C 复制逻辑
+      if (isMod && e.key === 'c' && isAllSelected) {
+        e.preventDefault();
+        navigator.clipboard.writeText(activeDoc.content);
+        setIsAllSelected(false);
+        setShowCopyFeedback(true);
+        setTimeout(() => setShowCopyFeedback(false), 2000);
+      }
+
+      // Esc 取消全选
+      if (e.key === 'Escape') {
+        setIsAllSelected(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeDoc.content, isAllSelected]);
 
   const updateActiveContent = (newContent: string) => {
     setDocs(prev => prev.map(d => d.id === activeId ? { ...d, content: newContent, lastModified: Date.now() } : d));
@@ -55,7 +99,7 @@ const App: React.FC = () => {
       const polished = await geminiService.polishMarkdown(activeDoc.content);
       updateActiveContent(polished);
     } catch (err) {
-      alert("AI 润色暂时不可用，请检查网络或 GitHub Secrets 中的 API_KEY 配置");
+      alert("AI 润色暂时不可用，请检查 GitHub Secrets 中的 API_KEY 配置");
     } finally {
       setIsAiLoading(false);
     }
@@ -74,9 +118,7 @@ const App: React.FC = () => {
       await writable.write(activeDoc.content);
       await writable.close();
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        console.error("另存为失败:", err);
-      }
+      if (err.name !== 'AbortError') console.error("另存为失败:", err);
     }
   };
 
@@ -89,7 +131,7 @@ const App: React.FC = () => {
       margin: 0.5,
       filename: `${activeDoc.title || '文档'}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
+      html2canvas: { scale: 2, useCORS: true, logging: false },
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
 
@@ -108,9 +150,10 @@ const App: React.FC = () => {
     setDocs([newDoc, ...docs]);
     setActiveId(newDoc.id);
     setActiveFileHandle(null);
+    setIsAllSelected(false);
   };
 
-  const handleFileSelect = async (fileHandle: FileSystemFileHandle) => {
+  const handleFileSelect = async (fileHandle: any) => {
     try {
       const file = await fileHandle.getFile();
       const text = await file.text();
@@ -129,6 +172,7 @@ const App: React.FC = () => {
         setActiveId(newDoc.id);
       }
       setActiveFileHandle(fileHandle);
+      setIsAllSelected(false);
     } catch (e) {
       console.error("读取文件失败:", e);
     }
@@ -136,12 +180,13 @@ const App: React.FC = () => {
 
   const handleGlobalClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest('.markdown-block') === null && target.closest('aside') === null && target.closest('header') === null && target.closest('.toolbar-container') === null) {
+    setIsAllSelected(false); // 点击任何地方取消全选状态
+    if (!target.closest('.markdown-block') && !target.closest('aside') && !target.closest('header') && !target.closest('.toolbar-container')) {
       editorRef.current?.focusLast();
     }
   };
 
-  if (!activeDoc) return <div className="p-10">加载中...</div>;
+  if (!activeDoc) return <div className="p-10 text-slate-400">正在恢复文档...</div>;
 
   return (
     <div className="flex h-screen w-full bg-white text-slate-900 overflow-hidden font-sans">
@@ -154,6 +199,7 @@ const App: React.FC = () => {
         onSelect={(id: string) => {
           setActiveId(id);
           setActiveFileHandle(null);
+          setIsAllSelected(false);
         }}
         onFileSelect={handleFileSelect}
         onToggle={() => setSidebarOpen(!isSidebarOpen)}
@@ -189,10 +235,10 @@ const App: React.FC = () => {
               <input 
                 value={activeDoc.title}
                 onChange={(e) => setDocs(prev => prev.map(d => d.id === activeId ? { ...d, title: e.target.value } : d))}
-                className="bg-transparent border-none outline-none font-bold text-sm text-slate-700 w-48 focus:ring-2 focus:ring-indigo-500/20 rounded px-1"
+                className="bg-transparent border-none outline-none font-bold text-sm text-slate-700 w-48 focus:ring-2 focus:ring-indigo-500/20 rounded px-1 transition-all"
               />
               <span className="text-[10px] text-slate-400 px-1">
-                {activeFileHandle ? `工作区文件: ${activeFileHandle.name}` : '本地草稿'}
+                {activeFileHandle ? `工作区: ${activeFileHandle.name}` : '本地草稿'}
               </span>
             </div>
           </div>
@@ -203,7 +249,7 @@ const App: React.FC = () => {
               className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 text-slate-600 rounded-full text-xs font-semibold hover:bg-slate-50 transition-all active:scale-95"
             >
               <Save size={14} />
-              另存为
+              导出 .md
             </button>
             <button 
               onClick={handleExportPdf}
@@ -234,9 +280,25 @@ const App: React.FC = () => {
               content={activeDoc.content} 
               onChange={updateActiveContent}
               projectHandle={projectHandle}
+              isAllSelected={isAllSelected}
             />
           </div>
         </div>
+
+        {/* 复制成功提示 */}
+        {showCopyFeedback && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-top-4 duration-300 z-50">
+            <Check size={14} className="text-emerald-400" />
+            已复制全文到剪贴板
+          </div>
+        )}
+
+        {/* 全选提示 */}
+        {isAllSelected && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-indigo-600 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-xs font-bold animate-pulse z-50">
+            已选中全文，按 Ctrl + C 复制
+          </div>
+        )}
 
         <div className="toolbar-container absolute bottom-8 left-1/2 -translate-x-1/2">
           <Toolbar 
@@ -247,11 +309,12 @@ const App: React.FC = () => {
 
         <footer className="h-8 px-6 border-t border-slate-100 flex items-center justify-between text-[10px] font-medium text-slate-400 bg-white">
           <div className="flex items-center gap-4">
-            <span>字符数: {activeDoc.content.length}</span>
+            <span>字数: {activeDoc.content.length}</span>
+            <span>行数: {activeDoc.content.split('\n').length}</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-            状态: {activeFileHandle ? '工作区' : '就绪'}
+            <div className={`w-2 h-2 rounded-full ${activeFileHandle ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
+            状态: {activeFileHandle ? '工作区同步中' : '自动保存至本地'}
           </div>
         </footer>
       </main>

@@ -8,6 +8,7 @@ import rehypeKatex from 'rehype-katex';
 interface BlockProps {
   content: string;
   isActive: boolean;
+  isGlobalSelected?: boolean;
   projectHandle: FileSystemDirectoryHandle | null;
   onFocus: () => void;
   onChange: (newContent: string) => void;
@@ -19,6 +20,7 @@ interface BlockProps {
 export const Block: React.FC<BlockProps> = React.memo(({ 
   content, 
   isActive, 
+  isGlobalSelected = false,
   projectHandle, 
   onFocus, 
   onChange, 
@@ -100,7 +102,7 @@ export const Block: React.FC<BlockProps> = React.memo(({
     if (c.startsWith('## ')) return 'text-3xl font-bold text-slate-800 mb-6 leading-snug font-serif';
     if (c.startsWith('### ')) return 'text-2xl font-bold text-slate-800 mb-4 leading-normal font-serif';
     if (c.startsWith('> ')) return 'border-l-4 border-indigo-400 pl-6 py-3 italic text-slate-600 mb-6 bg-slate-50/50 rounded-r-xl';
-    if (isCodeBlock) return 'mb-8 rounded-xl overflow-hidden bg-[#1e293b]'; // 使用与 CSS 相同的背景色
+    if (isCodeBlock) return 'mb-8 rounded-xl overflow-hidden bg-[#1e293b]';
     if (isMathBlock) return 'text-center my-6 bg-slate-50/30 p-4 rounded-xl';
     if (imageMatch) return 'flex justify-center mb-10 overflow-hidden';
     return 'text-[18px] text-slate-700 leading-[1.85] mb-5 min-h-[1.85em]';
@@ -136,9 +138,11 @@ export const Block: React.FC<BlockProps> = React.memo(({
     );
   };
 
+  const isSelectedStyle = isGlobalSelected ? 'bg-indigo-100/50 shadow-sm ring-1 ring-indigo-200' : (isActive ? 'bg-indigo-50/40 shadow-sm' : 'hover:bg-slate-50/60');
+
   return (
     <div 
-      className={`markdown-block relative group px-8 py-2 -mx-8 rounded-2xl transition-all duration-200 min-h-[32px] ${isActive ? 'bg-indigo-50/40 shadow-sm' : 'hover:bg-slate-50/60 cursor-text'}`}
+      className={`markdown-block relative group px-8 py-2 -mx-8 rounded-2xl transition-all duration-200 min-h-[32px] ${isSelectedStyle} cursor-text`}
       onMouseDown={(e) => {
           if (e.button === 0) {
             e.stopPropagation();
@@ -147,7 +151,7 @@ export const Block: React.FC<BlockProps> = React.memo(({
       }}
       onContextMenu={onContextMenu}
     >
-      {isActive ? (
+      {isActive && !isGlobalSelected ? (
         <div className={`w-full relative z-10 animate-in fade-in duration-200 ${dynamicClass} ${isCodeBlock ? 'p-6' : ''}`}>
           <textarea
             ref={textareaRef}
@@ -174,11 +178,11 @@ export const Block: React.FC<BlockProps> = React.memo(({
           {renderContent()}
         </div>
       )}
-      {isActive && (
+      {isActive && !isGlobalSelected && (
         <div className="absolute left-1 top-2 bottom-2 w-1 bg-indigo-500 rounded-full shadow-[0_0_12px_rgba(79,70,229,0.4)] animate-pulse z-20" />
       )}
     </div>
   );
 }, (prev, next) => {
-  return prev.isActive === next.isActive && prev.content === next.content && prev.projectHandle === next.projectHandle;
+  return prev.isActive === next.isActive && prev.content === next.content && prev.projectHandle === next.projectHandle && prev.isGlobalSelected === next.isGlobalSelected;
 });

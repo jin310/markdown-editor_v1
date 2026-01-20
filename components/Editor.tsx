@@ -7,6 +7,7 @@ interface EditorProps {
   content: string;
   onChange: (content: string) => void;
   projectHandle: FileSystemDirectoryHandle | null;
+  isAllSelected?: boolean;
 }
 
 export interface EditorRef {
@@ -48,7 +49,7 @@ const splitMarkdownIntoBlocks = (text: string): string[] => {
   return blocks.length > 0 ? blocks : [''];
 };
 
-export const Editor = forwardRef<EditorRef, EditorProps>(({ content, onChange, projectHandle }, ref) => {
+export const Editor = forwardRef<EditorRef, EditorProps>(({ content, onChange, projectHandle, isAllSelected = false }, ref) => {
   const [internalBlocks, setInternalBlocks] = useState<BlockItem[]>([]);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [menuPos, setMenuPos] = useState<{ x: number, y: number } | null>(null);
@@ -179,7 +180,6 @@ export const Editor = forwardRef<EditorRef, EditorProps>(({ content, onChange, p
       case 'table': handleBlockChange(idx, '| 标题 1 | 标题 2 | 标题 3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |'); break;
       case 'hr': handleBlockChange(idx, '---'); break;
     }
-    // 动作完成后，保持对当前块的激活
     setActiveIdx(idx);
   };
 
@@ -202,6 +202,7 @@ export const Editor = forwardRef<EditorRef, EditorProps>(({ content, onChange, p
             key={block.id}
             content={block.content}
             isActive={activeIdx === i}
+            isGlobalSelected={isAllSelected}
             projectHandle={projectHandle}
             onFocus={() => setActiveIdx(i)}
             onChange={(val) => handleBlockChange(i, val)}

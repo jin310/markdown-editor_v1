@@ -8,10 +8,13 @@ interface EditorProps {
   onChange: (content: string) => void;
   projectHandle: FileSystemDirectoryHandle | null;
   isAllSelected?: boolean;
+  theme?: 'default' | 'zhihu';
+  isSmartPaste?: boolean;
 }
 
 export interface EditorRef {
   focusLast: () => void;
+  clearActive: () => void;
   applyAction: (action: string) => void;
   handlePasteImage: (file: File) => void;
 }
@@ -49,7 +52,14 @@ const splitMarkdownIntoBlocks = (text: string): string[] => {
   return blocks.length > 0 ? blocks : [''];
 };
 
-export const Editor = forwardRef<EditorRef, EditorProps>(({ content, onChange, projectHandle, isAllSelected = false }, ref) => {
+export const Editor = forwardRef<EditorRef, EditorProps>(({ 
+  content, 
+  onChange, 
+  projectHandle, 
+  isAllSelected = false, 
+  theme = 'default',
+  isSmartPaste = true
+}, ref) => {
   const [internalBlocks, setInternalBlocks] = useState<BlockItem[]>([]);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [menuPos, setMenuPos] = useState<{ x: number, y: number } | null>(null);
@@ -177,6 +187,8 @@ export const Editor = forwardRef<EditorRef, EditorProps>(({ content, onChange, p
       case 'number': handleBlockChange(idx, '1. ' + cleanPrefix(currentBlock.content)); break;
       case 'code': handleBlockChange(idx, '```javascript\n// 在此输入代码\n\n```'); break;
       case 'math': handleBlockChange(idx, '$$\n\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}\n$$'); break;
+      case 'code': handleBlockChange(idx, '```javascript\n// 在此输入代码\n\n```'); break;
+      case 'math': handleBlockChange(idx, '$$\n\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}\n$$'); break;
       case 'table': handleBlockChange(idx, '| 标题 1 | 标题 2 | 标题 3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |'); break;
       case 'hr': handleBlockChange(idx, '---'); break;
     }
@@ -186,6 +198,9 @@ export const Editor = forwardRef<EditorRef, EditorProps>(({ content, onChange, p
   useImperativeHandle(ref, () => ({
     focusLast: () => {
       if (internalBlocks.length > 0) setActiveIdx(internalBlocks.length - 1);
+    },
+    clearActive: () => {
+      setActiveIdx(null);
     },
     applyAction: (action) => handleContextAction(action),
     handlePasteImage: (file) => {
@@ -207,6 +222,8 @@ export const Editor = forwardRef<EditorRef, EditorProps>(({ content, onChange, p
             onFocus={() => setActiveIdx(i)}
             onChange={(val) => handleBlockChange(i, val)}
             onPasteImage={(file) => handlePasteImage(i, file)}
+            theme={theme}
+            isSmartPaste={isSmartPaste}
             onContextMenu={(e) => {
               e.preventDefault();
               setActiveIdx(i);

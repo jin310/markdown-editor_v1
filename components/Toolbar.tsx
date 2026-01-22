@@ -69,11 +69,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onImageUpload, onAction }) => 
             <div className="text-slate-600 group-hover:text-slate-900 transition-colors">
               <tool.icon size={19} strokeWidth={1.8} />
             </div>
-            
-            {/* Tooltip */}
-            <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-              {tool.desc}
-            </div>
           </button>
         ))}
       </div>

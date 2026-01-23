@@ -7,7 +7,7 @@ import { geminiService } from './services/geminiService';
 import { PanelLeft, Sparkles, Loader2, Save, Check, Layout, Send } from 'lucide-react';
 
 // @ts-ignore
-import html2pdf from 'html2pdf.js/dist/html2pdf.min.js';
+import html2pdf from 'html2pdf.js';
 
 const STORAGE_KEY = 'novascribe_docs';
 const MAX_HISTORY_SIZE = 50;
@@ -27,7 +27,6 @@ const App: React.FC = () => {
   const [activeFileHandle, setActiveFileHandle] = useState<any>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   const [projectHandle, setProjectHandle] = useState<any>(null);
   const [isAllSelected, setIsAllSelected] = useState(false);
   const [showCopyFeedback, setShowCopyFeedback] = useState(false);
@@ -137,7 +136,7 @@ const App: React.FC = () => {
       const polished = await geminiService.polishMarkdown(activeDoc.content);
       updateActiveContent(polished, true);
     } catch (err) {
-      alert("AI 润色暂时不可用");
+      alert("AI 润色暂时不可用，请确认 API Key 是否正确配置。");
     } finally {
       setIsAiLoading(false);
     }
@@ -196,8 +195,10 @@ const App: React.FC = () => {
       const file = await fileHandle.getFile();
       const text = await file.text();
       const existing = docs.find(d => d.id === fileHandle.name);
-      if (existing) setActiveId(existing.id);
-      else {
+      if (existing) {
+        setActiveId(existing.id);
+        setDocs(prev => prev.map(d => d.id === existing.id ? { ...d, content: text } : d));
+      } else {
         const newDoc = { id: fileHandle.name, title: fileHandle.name, content: text, lastModified: Date.now() };
         setDocs([newDoc, ...docs]);
         setActiveId(newDoc.id);
@@ -338,7 +339,7 @@ const App: React.FC = () => {
         <footer className="h-8 px-6 border-t border-slate-100 flex items-center justify-between text-[10px] font-medium text-slate-400 bg-white">
           <div className="flex items-center gap-4">
             <span>字数: {activeDoc.content.length}</span>
-            <span>行数: {activeDoc.content.split('\n').length}</span>
+            <span>行数: {activeDoc.content.split('\n').filter(l => l.trim() !== '').length}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${activeFileHandle ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
